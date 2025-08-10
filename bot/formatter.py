@@ -57,12 +57,12 @@ def calculate_round_time(start_time: Optional[str]) -> str:
         print(f"⚠️ Ошибка расчета времени раунда: {e}")
         return "Ошибка"
 
-def create_status_message( Optional[Dict[str, Any]]) -> str:
+def create_status_message(data: Optional[Dict[str, Any]]) -> str:  # Исправлено: добавлено имя параметра 'data'
     """Создание сообщения статуса"""
     # Уникальный временной штамп для гарантированного обновления
     timestamp = int(datetime.datetime.now().timestamp())
     
-    if not 
+    if not data:  # Исправлено: использована переменная data
         return (
             "❌ Ошибка подключения\n"
             "Не удалось получить данные сервера. Проверьте подключение.\n\n"

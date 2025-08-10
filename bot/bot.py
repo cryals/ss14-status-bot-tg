@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import Message, BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeAllGroupChats
@@ -16,6 +17,7 @@ class StatusBot:
         self.dp = Dispatcher()
         self.update_task = None
         self.last_status_hash = None  # Для отслеживания изменений
+        self.update_interval = UPDATE_INTERVAL  # Делаем интервал обновления динамическим
         self.setup_handlers()
     
     def setup_handlers(self):
@@ -89,58 +91,64 @@ class StatusBot:
     
     async def update_status_messages(self):
         """Функция обновления сообщений"""
-        status_data = await ServerAPI.fetch_server_status()
-        
-        # Создаем хеш от данных для сравнения
-        current_hash = hash(str(status_data))
-        
-        # Проверяем, изменились ли данные
-        if current_hash == self.last_status_hash:
-            return  # Не обновляем, если данные не изменились
-        
-        self.last_status_hash = current_hash
-        status_msg = create_status_message(status_data)
-        messages = MessageStorage.load()
-        
-        if not messages:
-            return
-        
-        for msg in messages[:]:  # Используем копию списка для безопасного удаления
-            chat_id = msg["chat_id"]
-            message_id = msg["message_id"]
+        try:
+            status_data = await ServerAPI.fetch_server_status()
             
-            try:
-                await self.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=status_msg,
-                    parse_mode="Markdown",
-                    disable_web_page_preview=True
-                )
-                logging.info(f"✓ Сообщение {message_id} в чате {chat_id} успешно обновлено")
-            except Exception as e:
-                error_msg = str(e).lower()
-                logging.error(f"⚠️ Ошибка обновления сообщения {message_id}: {e}")
+            # Создаем хеш от данных для сравнения
+            current_hash = hash(str(status_data))
+            
+            # Проверяем, изменились ли данные
+            if current_hash == self.last_status_hash:
+                return  # Не обновляем, если данные не изменились
+            
+            self.last_status_hash = current_hash
+            status_msg = create_status_message(status_data)
+            messages = MessageStorage.load()
+            
+            if not messages:
+                return
+            
+            for msg in messages[:]:  # Используем копию списка для безопасного удаления
+                chat_id = msg["chat_id"]
+                message_id = msg["message_id"]
                 
-                # Игнорируем ошибку, если сообщение не изменилось
-                if "message is not modified" in error_msg:
-                    logging.info(f"- Содержимое сообщения не изменилось, пропускаем")
-                    continue
-                
-                # Обработка flood control
-                if "flood control" in error_msg or "retry after" in error_msg:
-                    logging.warning("⚠️ Flood control активирован, уменьшаем частоту обновления")
-                    # Увеличиваем интервал обновления на 5 минут
-                    global UPDATE_INTERVAL
-                    UPDATE_INTERVAL = max(UPDATE_INTERVAL, 300)
-                    continue
-                
-                # Удаляем сообщение из списка при реальных ошибках
-                MessageStorage.remove_message(chat_id, message_id)
+                try:
+                    await self.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=status_msg,
+                        parse_mode="Markdown",
+                        disable_web_page_preview=True
+                    )
+                    logging.info(f"✓ Сообщение {message_id} в чате {chat_id} успешно обновлено")
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    logging.error(f"⚠️ Ошибка обновления сообщения {message_id}: {e}")
+                    
+                    # Игнорируем ошибку, если сообщение не изменилось
+                    if "message is not modified" in error_msg:
+                        logging.info(f"- Содержимое сообщения не изменилось, пропускаем")
+                        continue
+                    
+                    # Обработка flood control
+                    if "flood control" in error_msg or "retry after" in error_msg:
+                        # Извлекаем время задержки из сообщения об ошибке
+                        match = re.search(r'retry after (\d+)', error_msg)
+                        if match:
+                            retry_after = int(match.group(1))
+                            logging.warning(f"⚠️ Flood control активирован, увеличиваем интервал обновления до {retry_after} секунд")
+                            # Увеличиваем интервал обновления
+                            self.update_interval = max(self.update_interval, retry_after)
+                        continue
+                    
+                    # Удаляем сообщение из списка при реальных ошибках
+                    MessageStorage.remove_message(chat_id, message_id)
+        except Exception as e:
+            logging.error(f"⚠️ Критическая ошибка в update_status_messages: {e}")
     
     async def status_update_loop(self):
         """Цикл периодического обновления статуса"""
-        logging.info(f"Автообновление запущено (проверка каждые {UPDATE_INTERVAL} секунд)")
+        logging.info(f"Автообновление запущено (проверка каждые {self.update_interval} секунд)")
         
         while True:
             try:
@@ -148,7 +156,9 @@ class StatusBot:
             except Exception as e:
                 logging.error(f"⚠️ Ошибка в цикле обновления: {e}")
             
-            await asyncio.sleep(UPDATE_INTERVAL)
+            # Используем динамический интервал
+            logging.info(f"Следующее обновление через {self.update_interval} секунд")
+            await asyncio.sleep(self.update_interval)
     
     async def set_bot_commands(self):
         """Установка команд бота"""

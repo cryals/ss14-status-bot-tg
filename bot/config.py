@@ -16,8 +16,8 @@ if not BOT_TOKEN:
 # URL для получения статуса сервера
 STATUS_URL = os.getenv("STATUS_URL", "http://85.192.49.3:1212/status")
 
-# Интервал обновления в секундах
-UPDATE_INTERVAL = int(os.getenv("UPDATE_INTERVAL", "2"))
+# Интервал обновления в секундах (по умолчанию 30 секунд)
+UPDATE_INTERVAL = int(os.getenv("UPDATE_INTERVAL", "30"))
 
 # Путь к файлу хранения сообщений
 STORAGE_PATH = BASE_DIR / "status_messages.json"

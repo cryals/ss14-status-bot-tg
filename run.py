@@ -14,7 +14,7 @@ if __name__ == "__main__":
     try:
         # Запускаем основной цикл
         asyncio.run(main())
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         print("\nПрограмма остановлена пользователем (Ctrl+C)")
         sys.exit(0)
     except Exception as e:

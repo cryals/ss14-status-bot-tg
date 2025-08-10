@@ -15,6 +15,7 @@ class StatusBot:
         self.bot = Bot(token=BOT_TOKEN)
         self.dp = Dispatcher()
         self.update_task = None
+        self.last_status_hash = None  # Для отслеживания изменений
         self.setup_handlers()
     
     def setup_handlers(self):
@@ -40,7 +41,7 @@ class StatusBot:
         status_msg = create_status_message(status_data)
         await message.answer(
             status_msg,
-            parse_mode="Markdown",  # Используем простой Markdown вместо MarkdownV2
+            parse_mode="Markdown",
             disable_web_page_preview=True
         )
     
@@ -59,7 +60,7 @@ class StatusBot:
         try:
             sent_message = await message.answer(
                 status_msg,
-                parse_mode="Markdown",  # Используем простой Markdown вместо MarkdownV2
+                parse_mode="Markdown",
                 disable_web_page_preview=True
             )
             
@@ -89,6 +90,15 @@ class StatusBot:
     async def update_status_messages(self):
         """Функция обновления сообщений"""
         status_data = await ServerAPI.fetch_server_status()
+        
+        # Создаем хеш от данных для сравнения
+        current_hash = hash(str(status_data))
+        
+        # Проверяем, изменились ли данные
+        if current_hash == self.last_status_hash:
+            return  # Не обновляем, если данные не изменились
+        
+        self.last_status_hash = current_hash
         status_msg = create_status_message(status_data)
         messages = MessageStorage.load()
         
@@ -104,7 +114,7 @@ class StatusBot:
                     chat_id=chat_id,
                     message_id=message_id,
                     text=status_msg,
-                    parse_mode="Markdown",  # Используем простой Markdown вместо MarkdownV2
+                    parse_mode="Markdown",
                     disable_web_page_preview=True
                 )
                 logging.info(f"✓ Сообщение {message_id} в чате {chat_id} успешно обновлено")
@@ -117,12 +127,20 @@ class StatusBot:
                     logging.info(f"- Содержимое сообщения не изменилось, пропускаем")
                     continue
                 
+                # Обработка flood control
+                if "flood control" in error_msg or "retry after" in error_msg:
+                    logging.warning("⚠️ Flood control активирован, уменьшаем частоту обновления")
+                    # Увеличиваем интервал обновления на 5 минут
+                    global UPDATE_INTERVAL
+                    UPDATE_INTERVAL = max(UPDATE_INTERVAL, 300)
+                    continue
+                
                 # Удаляем сообщение из списка при реальных ошибках
                 MessageStorage.remove_message(chat_id, message_id)
     
     async def status_update_loop(self):
         """Цикл периодического обновления статуса"""
-        logging.info(f"Автообновление запущено (каждые {UPDATE_INTERVAL} секунд)")
+        logging.info(f"Автообновление запущено (проверка каждые {UPDATE_INTERVAL} секунд)")
         
         while True:
             try:

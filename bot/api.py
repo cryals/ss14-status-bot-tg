@@ -19,15 +19,3 @@ class ServerAPI:
         except Exception as e:
             print(f"⚠️ Ошибка при получении данных: {e}")
             return None
-
-# Тестовый вызов для проверки API
-async def test_api():
-    status = await ServerAPI.fetch_server_status()
-    if status:
-        print("✅ Подключение к API успешно")
-        print(f"Пример данных: players={status.get('players')}, map={status.get('map')}")
-    else:
-        print("❌ Не удалось подключиться к API")
-
-if __name__ == "__main__":
-    asyncio.run(test_api())
